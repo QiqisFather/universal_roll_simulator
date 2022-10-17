@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Genshin Impact Roll Simulator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js" integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf" crossorigin="anonymous"></script>
+ 
+    <script id="worker" type="javascript/worker">
+        self.onmessage = function(e) {
+            var rateUpsC = 0;
+            var rateUpsW = 0;
+            var othersC = 0;
+            var othersW = 0;
+            var t = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+            for (var i = 0; i < e.data.simulations; i++) {
+                var roll = simulateOne(e.data.strategy, e.data.rolls, e.data.pityCounterC, e.data.pityCounterW, e.data.guaranteedRateUpC, e.data.guaranteedRateUpW, e.data.pathPoints);
+                rateUpsC += roll.rateUpsC;
+                rateUpsW += roll.rateUpsW;
+                othersC += roll.othersC;
+                othersW += roll.othersW;
+                if (roll.rateUpsC + roll.rateUpsW > 0) {
+                    t[Math.min(roll.rateUpsC + roll.rateUpsW - 1, 11)] += 1;
+                }
+                if (i % (e.data.simulations / 50) == 0) {
+                    postMessage({
+                        progress: i
+                    });
+                }
+            }
+            postMessage({
+                rateUpsC: rateUpsC,
+                rateUpsW: rateUpsW,
+                othersC: othersC,
+                othersW: othersW,
+                t: t,
+            });
+        };
+ 
+        function simulateOne(strategy, rolls, pityCounterC, pityCounterW, guaranteedRateUpC, guaranteedRateUpW, pathPoints) {
+            var rateUpsC = 0;
+            var rateUpsW = 0;
+            var othersC = 0;
+            var othersW = 0;
+            for (var i = 0; i < rolls; i++) {
+                if (strategy[rateUpsC + rateUpsW] == 'C') {
+                    pityCounterC++;
+                    var diceRoll = Math.random();
+                    if (diceRoll < chanceC(pityCounterC)) {
+                        pityCounterC = 0;
+                        if (guaranteedRateUpC || Math.random() < 0.5) {
+                            rateUpsC++;
+                            guaranteedRateUpC = false;
+                        } else {
+                            othersC++;
+                            guaranteedRateUpC = true;
+                        }
+                    }
+                }
+                if (strategy[rateUpsC + rateUpsW] == 'W') {
+                    pityCounterW++;
+                    var diceRoll = Math.random();
+                    if (diceRoll < chanceW(pityCounterW)) {
+                        pityCounterW = 0;
+                        if (guaranteedRateUpW || pathPoints == 2 || Math.random() < 0.75) {
+                            guaranteedRateUpW = false;
+                            if (pathPoints == 2 || Math.random() < 0.5) {
+                                pathPoints = 0;
+                                rateUpsW++;
+                            } else {
+                                othersW++;
+                                pathPoints++;
+                            }
+                        } else {
+                            othersW++;
+                            guaranteedRateUpW = true;
+                            pathPoints++;
+                        }
+                    }
+                }
+            }
+            return {
+                rateUpsC: rateUpsC,
+                rateUpsW: rateUpsW,
+                othersC: othersC,
+                othersW: othersW
+            };
+        }
+ 
+        function chanceC(pityCounter) {
+            if (pityCounter < 74) {
+                return 0.006;
+            } else {
+                return 0.006 + (pityCounter - 73) * 0.06;
+            }
+            
+        }
+ 
+        function chanceW(pityCounter) {
+            if (pityCounter < 63) {
+                return 0.007;
+            } else if (pityCounter < 75) {
+                return 0.007 + (pityCounter - 62) * 0.07;
+            } else if (pityCounter < 80) {
+                return 0.2;
+            }
+            return 1.01;
+        }
+    </script>
+ 
+    <script>
+        simulations = 1000000;
+ 
+        var blob = new Blob([
+            document.querySelector('#worker').textContent
+        ], { type: "text/javascript" })
+ 
+        var worker;
+ 
+        function simulate() {
+            var strategy = document.getElementById("strategy").value.padEnd(12, 'W');
+            var c = -1;
+            var r = 0;
+            for (var i = 0; i < 12; i++) {
+                if (strategy[i] == 'C') {
+                    c++;
+                }
+                if (strategy[i] == 'W') {
+                    r++;
+                }
+                var e = document.getElementById('t'+(i+1)).parentElement.children[0];
+                var s = ''
+                if (c >= 0) {
+                    s = s+'C'+c;
+                }
+                if (r >= 1) {
+                    s = s+'R'+r;
+                }
+                if (i < 11) {
+                    s = s+'+';
+                }
+                e.innerHTML = s;
+            }
+            
+            var primogems = Number(document.getElementById("primogems").value);
+            var fates = Number(document.getElementById("fates").value);
+            var pityCounterC = Number(document.getElementById("pityC").value);
+            var pityCounterW = Number(document.getElementById("pityW").value);
+            var pathPoints = Number(document.getElementById("pathPoints").value);
+            if (isNaN(primogems) || isNaN(fates) || isNaN(pityCounterC) || isNaN(pityCounterW) || isNaN(pathPoints)) {
+                document.getElementById("progress").innerHTML = "<p style='color:red'>Invalid inputs</p>";
+                return;
+            }
+            
+            var guaranteedRateUpC = document.getElementById("guaranteedC").checked
+            var guaranteedRateUpW = document.getElementById("guaranteedW").checked
+ 
+            if (worker) {
+                worker.terminate();
+            }
+            worker = new Worker(window.URL.createObjectURL(blob));
+            worker.onmessage = update;
+ 
+            
+            var rolls = primogems / 160 + fates;
+            worker.postMessage({
+                strategy: strategy,
+                rolls: rolls,
+                pityCounterC: pityCounterC,
+                pityCounterW: pityCounterW,
+                guaranteedRateUpC: guaranteedRateUpC,
+                guaranteedRateUpW: guaranteedRateUpW,
+                pathPoints: pathPoints,
+                simulations: simulations
+            });
+        }
+ 
+        function update(e) {
+            if (typeof e.data.progress !== 'undefined') {
+                document.getElementById("progress").innerHTML = "Running simulations. Total progress: " + (e.data.progress * 100 / simulations).toFixed(0) + "%";
+                return;
+            }
+            document.getElementById("progress").innerHTML = "Simulation complete";
+ 
+            var t = e.data.t;
+            document.getElementById("totalC").innerHTML = ((e.data.rateUpsC + e.data.othersC) / simulations).toFixed(2);
+            document.getElementById("rateUpC").innerHTML = (e.data.rateUpsC / simulations).toFixed(2);
+            document.getElementById("totalW").innerHTML = ((e.data.rateUpsW + e.data.othersW) / simulations).toFixed(2);
+            document.getElementById("rateUpW").innerHTML = (e.data.rateUpsW / simulations).toFixed(2);
+            document.getElementById("t1").innerHTML = ((t[0] + t[1] + t[2] + t[3] + t[4] + t[5] + t[6] + t[7] + t[8] + t[9] + t[10] + t[11]) / simulations * 100).toFixed(1) + "%";
+            document.getElementById("t2").innerHTML = ((t[1] + t[2] + t[3] + t[4] + t[5] + t[6] + t[7] + t[8] + t[9] + t[10] + t[11]) / simulations * 100).toFixed(1) + "%";
+            document.getElementById("t3").innerHTML = ((t[2] + t[3] + t[4] + t[5] + t[6] + t[7] + t[8] + t[9] + t[10] + t[11]) / simulations * 100).toFixed(1) + "%";
+            document.getElementById("t4").innerHTML = ((t[3] + t[4] + t[5] + t[6] + t[7] + t[8] + t[9] + t[10] + t[11]) / simulations * 100).toFixed(1) + "%";
+            document.getElementById("t5").innerHTML = ((t[4] + t[5] + t[6] + t[7] + t[8] + t[9] + t[10] + t[11]) / simulations * 100).toFixed(1) + "%";
+            document.getElementById("t6").innerHTML = ((t[5] + t[6] + t[7] + t[8] + t[9] + t[10] + t[11]) / simulations * 100).toFixed(1) + "%";
+            document.getElementById("t7").innerHTML = ((t[6] + t[7] + t[8] + t[9] + t[10] + t[11]) / simulations * 100).toFixed(1) + "%";
+            document.getElementById("t8").innerHTML = ((t[7] + t[8] + t[9] + t[10] + t[11]) / simulations * 100).toFixed(1) + "%";
+            document.getElementById("t9").innerHTML = ((t[8] + t[9] + t[10] + t[11]) / simulations * 100).toFixed(1) + "%";
+            document.getElementById("t10").innerHTML = ((t[9] + t[10] + t[11]) / simulations * 100).toFixed(1) + "%";
+            document.getElementById("t11").innerHTML = ((t[10] + t[11]) / simulations * 100).toFixed(1) + "%";
+            document.getElementById("t12").innerHTML = (t[11] / simulations * 100).toFixed(1) + "%";
+            console.log(e.data);
+        }
+    </script>
+</head>
+ 
+<body class="bg-light">
+<div class="container">
+<div class="col-md-5">
+    <label for="primogems" class="form-label">Amount of primogems</label>
+    <input type="text" class="form-control w-25" id="primogems" value="0">
+    <label for="fates" class="form-label mt-2">Amount of fates</label>
+    <input type="text" class="form-control w-25" id="fates" value="0">
+    <label for="pityC" class="form-label mt-2">5* character pity counter (amount of rolls you made since your last 5*)</label>
+    <input type="text" class="form-control w-25" id="pityC" value="0">
+    <label for="pityW" class="form-label mt-2">5* weapon pity counter (amount of rolls you made since your last 5*)</label>
+    <input type="text" class="form-control w-25" id="pityW" value="0">
+</div>
+<div class="tab-content" id="myTabContent">
+    <div class="col-md-5">
+        <div class="form-check mt-2">
+            <input type="checkbox" class="form-check-input" id="guaranteedC">
+            <label class="form-check-label" for="guaranteedC">My next 5* character is guaranteed to be the featured one</label>
+        </div>
+        <div class="form-check mt-2">
+            <input type="checkbox" class="form-check-input" id="guaranteedW">
+            <label class="form-check-label" for="guaranteedW">My next 5* weapon is guaranteed to be a featured one</label>
+        </div>
+        <label for="pathPoints" class="form-label mt-2">Epitomized path fate points</label>
+        <input type="text" class="form-control w-25" id="pathPoints" value="0">
+        <label for="strategy" class="form-label mt-2">Strategy (C=character/constellation, W=weapon/refinement)</label>
+        <input type="text" class="form-control w-50" id="strategy" value="CCCCCCCWWWWW" maxlength="12">
+        <button type="button" class="btn btn-primary mt-2" onclick="simulate()">Simulate</button>
+        <div id="progress" class="mt-2">This page will run 1,000,000 simulations</div>
+    </div>
+    <div class="col-md-6 mt-2">
+        <table class="table">
+            <thead>
+            <tr>
+                <th scope="col">Average number of 5* characters</th>
+                <th scope="col">Value</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <th scope="row">Featured 5*</th>
+                <td id="rateUpC"></td>
+            </tr>
+            <tr>
+                <th scope="row">Any 5*</th>
+                <td id="totalC"></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="col-md-6 mt-2">
+        <table class="table">
+            <thead>
+            <tr>
+                <th scope="col">Average number of 5* weapons</th>
+                <th scope="col">Value</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <th scope="row">Specific featured 5*</th>
+                <td id="rateUpW"></td>
+            </tr>
+            <tr>
+                <th scope="row">Any 5*</th>
+                <td id="totalW"></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="col-md-6 mt-2">
+        <table class="table">
+            <thead>
+            <tr>
+                <th scope="col">Chance of getting the featured 5* character + signature</th>
+                <th scope="col">Value</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <th scope="row">C0+</th>
+                <td id="t1"></td>
+            </tr>
+            <tr>
+                <th scope="row">C1+</th>
+                <td id="t2"></td>
+            </tr>
+            <tr>
+                <th scope="row">C2+</th>
+                <td id="t3"></td>
+            </tr>
+            <tr>
+                <th scope="row">C3+</th>
+                <td id="t4"></td>
+            </tr>
+            <tr>
+                <th scope="row">C4+</th>
+                <td id="t5"></td>
+            </tr>
+            <tr>
+                <th scope="row">C5+</th>
+                <td id="t6"></td>
+            </tr>
+            <tr>
+                <th scope="row">C6+</th>
+                <td id="t7"></td>
+            </tr>
+            <tr>
+                <th scope="row">C6R1+</th>
+                <td id="t8"></td>
+            </tr>
+            <tr>
+                <th scope="row">C6R2+</th>
+                <td id="t9"></td>
+            </tr>
+            <tr>
+                <th scope="row">C6R3+</th>
+                <td id="t10"></td>
+            </tr>
+            <tr>
+                <th scope="row">C6R4+</th>
+                <td id="t11"></td>
+            </tr>
+            <tr>
+                <th scope="row">C6R5</th>
+                <td id="t12"></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+</div>
+</body>
+</html>
+ 
