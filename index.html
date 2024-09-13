@@ -48,7 +48,7 @@
                     var diceRoll = Math.random();
                     if (diceRoll < chanceC(pityCounterC)) {
                         pityCounterC = 0;
-                        if (guaranteedRateUpC || Math.random() < 0.5) {
+                        if (guaranteedRateUpC || Math.random() < 0.55) {
                             rateUpsC++;
                             guaranteedRateUpC = false;
                         } else {
@@ -62,9 +62,9 @@
                     var diceRoll = Math.random();
                     if (diceRoll < chanceW(pityCounterW)) {
                         pityCounterW = 0;
-                        if (guaranteedRateUpW || pathPoints == 2 || Math.random() < 0.75) {
+                        if (guaranteedRateUpW || pathPoints == 1 || Math.random() < 0.75) {
                             guaranteedRateUpW = false;
-                            if (pathPoints == 2 || Math.random() < 0.5) {
+                            if (pathPoints == 1 || Math.random() < 0.5) {
                                 pathPoints = 0;
                                 rateUpsW++;
                             } else {
